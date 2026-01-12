@@ -11,12 +11,6 @@ exports.recordStandup = async (req, res) => {
     await connection.beginTransaction();
 
     try {
-      // Record standup in history
-      await connection.query(
-        'INSERT INTO standup_history (user_id, points_earned) VALUES (?, ?)',
-        [userId, pointsEarned]
-      );
-
       // Get current points record
       const [pointsRecord] = await connection.query(
         'SELECT points, total_standups, streak_days, last_standup_date FROM points WHERE user_id = ?',
@@ -28,16 +22,38 @@ exports.recordStandup = async (req, res) => {
       }
 
       const currentPoints = pointsRecord[0];
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Normalize to start of day
+      const todayString = today.toISOString().split('T')[0];
+      
       const lastStandupDate = currentPoints.last_standup_date
-        ? new Date(currentPoints.last_standup_date).toISOString().split('T')[0]
+        ? new Date(currentPoints.last_standup_date)
         : null;
+      
+      if (lastStandupDate) {
+        lastStandupDate.setHours(0, 0, 0, 0); // Normalize to start of day
+      }
+
+      // Check if already recorded today to prevent multiple standups per day
+      if (lastStandupDate && lastStandupDate.getTime() === today.getTime()) {
+        await connection.rollback();
+        connection.release();
+        return res.status(400).json({ 
+          error: 'You have already recorded a standup today. Come back tomorrow!' 
+        });
+      }
+
+      // Record standup in history
+      await connection.query(
+        'INSERT INTO standup_history (user_id, points_earned) VALUES (?, ?)',
+        [userId, pointsEarned]
+      );
 
       // Calculate streak
       let newStreak = currentPoints.streak_days;
       if (lastStandupDate) {
         const daysDiff = Math.floor(
-          (new Date(today) - new Date(lastStandupDate)) / (1000 * 60 * 60 * 24)
+          (today.getTime() - lastStandupDate.getTime()) / (1000 * 60 * 60 * 24)
         );
         
         if (daysDiff === 1) {
@@ -45,7 +61,6 @@ exports.recordStandup = async (req, res) => {
         } else if (daysDiff > 1) {
           newStreak = 1; // Reset streak
         }
-        // If same day, keep current streak
       } else {
         newStreak = 1; // First standup
       }
@@ -57,7 +72,7 @@ exports.recordStandup = async (req, res) => {
       // Update points
       await connection.query(
         'UPDATE points SET points = points + ?, total_standups = total_standups + 1, streak_days = ?, last_standup_date = ? WHERE user_id = ?',
-        [totalPointsEarned, newStreak, today, userId]
+        [totalPointsEarned, newStreak, todayString, userId]
       );
 
       await connection.commit();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI } from '../services/api';
+import Modal from '../components/Modal';
 import '../styles/Users.css';
 
 interface User {
@@ -19,6 +20,12 @@ const Users: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [showPointsModal, setShowPointsModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [pointsInput, setPointsInput] = useState('');
+  const [adjustmentType, setAdjustmentType] = useState<'add' | 'subtract' | 'set'>('add');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,45 +40,65 @@ const Users: React.FC = () => {
       setTotalPages(response.data.pagination.totalPages);
     } catch (error) {
       console.error('Error fetching users:', error);
+      showMessage('error', 'Failed to fetch users');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleDeleteUser = async (userId: number, userName: string) => {
-    if (!window.confirm(`Are you sure you want to delete user "${userName}"?`)) {
-      return;
-    }
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
 
     try {
-      await adminAPI.deleteUser(userId);
-      alert('User deleted successfully');
+      await adminAPI.deleteUser(selectedUser.id);
+      showMessage('success', 'User deleted successfully');
+      setShowDeleteModal(false);
+      setSelectedUser(null);
       fetchUsers();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to delete user');
+      showMessage('error', error.response?.data?.error || 'Failed to delete user');
     }
   };
 
-  const handleAdjustPoints = async (userId: number, userName: string) => {
-    const points = prompt(`Enter points adjustment for ${userName} (use + or -):`);
-    if (!points) return;
+  const handleAdjustPoints = async () => {
+    if (!selectedUser || !pointsInput) return;
 
-    const amount = parseInt(points);
-    if (isNaN(amount)) {
-      alert('Invalid number');
+    const amount = parseInt(pointsInput);
+    if (isNaN(amount) || amount < 0) {
+      showMessage('error', 'Please enter a valid positive number');
       return;
     }
 
     try {
-      await adminAPI.updateUserPoints(userId, {
-        points: Math.abs(amount),
-        adjustment_type: amount >= 0 ? 'add' : 'subtract',
+      await adminAPI.updateUserPoints(selectedUser.id, {
+        points: amount,
+        adjustment_type: adjustmentType,
       });
-      alert('Points updated successfully');
+      showMessage('success', 'Points updated successfully');
+      setShowPointsModal(false);
+      setSelectedUser(null);
+      setPointsInput('');
       fetchUsers();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to update points');
+      showMessage('error', error.response?.data?.error || 'Failed to update points');
     }
+  };
+
+  const openPointsModal = (user: User) => {
+    setSelectedUser(user);
+    setPointsInput('');
+    setAdjustmentType('add');
+    setShowPointsModal(true);
+  };
+
+  const openDeleteModal = (user: User) => {
+    setSelectedUser(user);
+    setShowDeleteModal(true);
   };
 
   if (isLoading) {
@@ -86,6 +113,12 @@ const Users: React.FC = () => {
           ← Back to Dashboard
         </button>
       </header>
+
+      {message && (
+        <div className={`message ${message.type}`}>
+          {message.text}
+        </div>
+      )}
 
       <div className="users-table-container">
         <table className="users-table">
@@ -115,14 +148,14 @@ const Users: React.FC = () => {
                 <td>
                   <button
                     className="action-btn points-btn"
-                    onClick={() => handleAdjustPoints(user.id, user.name)}
+                    onClick={() => openPointsModal(user)}
                   >
                     ⭐ Points
                   </button>
                   {!user.is_admin && (
                     <button
                       className="action-btn delete-btn"
-                      onClick={() => handleDeleteUser(user.id, user.name)}
+                      onClick={() => openDeleteModal(user)}
                     >
                       🗑️ Delete
                     </button>
@@ -153,6 +186,89 @@ const Users: React.FC = () => {
           Next
         </button>
       </div>
+
+      {/* Points Adjustment Modal */}
+      <Modal
+        isOpen={showPointsModal}
+        onClose={() => setShowPointsModal(false)}
+        title={`Adjust Points for ${selectedUser?.name}`}
+      >
+        <div className="modal-form">
+          <div className="form-group">
+            <label>Adjustment Type:</label>
+            <select
+              value={adjustmentType}
+              onChange={(e) => setAdjustmentType(e.target.value as any)}
+              className="form-select"
+            >
+              <option value="add">Add Points</option>
+              <option value="subtract">Subtract Points</option>
+              <option value="set">Set Points</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label>Points Amount:</label>
+            <input
+              type="number"
+              value={pointsInput}
+              onChange={(e) => setPointsInput(e.target.value)}
+              placeholder="Enter amount"
+              className="form-input"
+              min="0"
+            />
+          </div>
+
+          <div className="form-group">
+            <p className="current-points">
+              Current Points: <strong>{selectedUser?.points || 0}</strong>
+            </p>
+          </div>
+
+          <div className="modal-actions">
+            <button
+              onClick={() => setShowPointsModal(false)}
+              className="btn-cancel"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAdjustPoints}
+              className="btn-confirm"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title="Delete User"
+      >
+        <div className="modal-form">
+          <p className="warning-text">
+            Are you sure you want to delete user <strong>{selectedUser?.name}</strong>?
+            This action cannot be undone.
+          </p>
+          <div className="modal-actions">
+            <button
+              onClick={() => setShowDeleteModal(false)}
+              className="btn-cancel"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteUser}
+              className="btn-confirm btn-danger"
+            >
+              Delete User
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
