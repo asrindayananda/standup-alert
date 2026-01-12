@@ -40,13 +40,55 @@ This project consists of three main components:
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Automated Setup Script
+
+```bash
+# Clone the repository
+git clone https://github.com/asrindayananda/standup-alert.git
+cd standup-alert
+
+# Run the setup script
+chmod +x setup.sh
+./setup.sh
+
+# Follow the instructions printed by the script
+```
+
+### Option 2: Docker Compose (Recommended for Development)
+
+```bash
+# Clone the repository
+git clone https://github.com/asrindayananda/standup-alert.git
+cd standup-alert
+
+# Copy and configure environment
+cp .env.docker.example .env
+# Edit .env with your secure passwords
+
+# Start all services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+```
+
+Services will be available at:
+- Backend API: `http://localhost:3000`
+- Admin Dashboard: `http://localhost:80`
+- MySQL: `localhost:3306`
+
+### Option 3: Manual Setup
+
+#### Prerequisites
 - Node.js v20 or higher
 - MySQL 8.0 or higher
 - React Native development environment (for mobile app)
 - npm or yarn
 
-### 1. Backend Setup
+#### 1. Backend Setup
 
 ```bash
 cd backend
@@ -59,7 +101,7 @@ npm run dev
 
 The API will run on `http://localhost:3000`
 
-### 2. Mobile App Setup
+#### 2. Mobile App Setup
 
 ```bash
 cd StandupAlertApp
@@ -71,6 +113,36 @@ npm run ios
 
 # For Android
 npm run android
+```
+
+#### 3. Admin Dashboard Setup
+
+```bash
+cd admin-web
+npm install
+npm start
+```
+
+The admin dashboard will open at `http://localhost:3000` (or 3001 if backend is using 3000)
+
+## 🐳 Docker Commands
+
+```bash
+# Start all services
+docker-compose up -d
+
+# Stop all services
+docker-compose down
+
+# View logs
+docker-compose logs -f [service_name]
+
+# Rebuild containers
+docker-compose up -d --build
+
+# Remove all data (caution!)
+docker-compose down -v
+```
 ```
 
 ### 3. Admin Dashboard Setup
